@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+
+		<!-- CSS -->
+		<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+		<link href="/static/css/style.css" rel="stylesheet" media="screen">
+
+		<!-- Javascript -->
+		<script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+		<script src="/static/js/utils.js"></script>
+
+		<title>Tag'el</title>
+	</head>
+
+	<body>
+		<!-- Navigation bar -->
+		<nav class="navbar navbar-default" role="navigation">
+			<a class="navbar-brand" href="#">Tag'el</a>
+		</nav>
+
+		<!-- Document submition container -->
+		<div id="adddoc" class="container">
+			<div class="text-center">
+				<button id="addb" class="btn btn-success btn-lg">Add!</button>
+			</div>
+		</div>
+		<hr />
+
+		<!-- Search container -->
+		<div id="search" class="container">
+			<div class="text-center">
+				<p>
+					<input type="text" id="searchq" placeholder="Enter some tags">
+				</p>
+				<p>
+					<button id="searchb" class="btn btn-success btn-lg">Search!</button>
+				</p>
+			</div>
+			<div id="docs">
+			</div>
+		</div>
+	</body>
+</html>
