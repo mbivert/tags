@@ -189,7 +189,8 @@ func add(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/user/", http.StatusFound)
 }
 
-func edit(w http.ResponseWriter, r *http.Request) {/*
+// edit document (delete too)
+func edit(w http.ResponseWriter, r *http.Request) {
 	// check if connected
 	idstr, err := checkToken(w, r)
 	if err != nil {
@@ -199,7 +200,27 @@ func edit(w http.ResponseWriter, r *http.Request) {/*
 
 	i, _ := strconv.ParseInt(idstr, 10, 32)
 	uid := int32(i)
-*/}
+
+	i, _ = strconv.ParseInt(r.FormValue("id"), 10, 32)
+	id := int32(i)
+
+	if !db.HasOwner(id, uid) { return }
+
+	switch r.FormValue("action") {
+	case "edit":
+		name := r.FormValue("name")
+		tags := splitTags(r.FormValue("tags"))
+		if len(tags) == 0 { return }
+		content := strings.TrimSpace(r.FormValue("content"))
+		typ := getType(content)
+		db.UpdateDoc(&Doc{ id, name, typ, content, uid, tags })
+
+	case "delete":
+		db.DelDoc(id)
+	}
+
+	http.Redirect(w, r, "/user/", http.StatusFound)
+}
 
 func main() {
 	db = NewDB()

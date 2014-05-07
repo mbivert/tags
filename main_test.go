@@ -163,7 +163,7 @@ func TestDocs(t *testing.T) {
 			t.Log(string(doc.json))
 			t.Error("Cannot retrieve doc:", err)
 		}
-		id := testdb.AddDoc(d)
+		id := testdb.AddDoc(&d)
 		if id != -1 && !doc.inserted ||
 		   id == -1 && doc.inserted {
 			t.Error("Wrong expectation about doc insertion")

@@ -82,8 +82,8 @@ func (db *Database) createTables() {
 
 	db.createFatal(`CREATE TABLE IF NOT EXISTS
 		tagsdocs(
-			idtag		INTEGER	REFERENCES	tags(id),
-			iddoc		INTEGER	REFERENCES	docs(id)
+			idtag		INTEGER	REFERENCES	tags(id)	ON DELETE CASCADE,
+			iddoc		INTEGER	REFERENCES	docs(id)	ON DELETE CASCADE
 		)
 	`)
 }
@@ -105,6 +105,13 @@ func (db *Database) loadTagCache() {
 func (db *Database) Init() {
 	db.createTables()
 	db.loadTagCache()
+}
+
+func (db *Database) HasOwner(id, uid int32) bool {
+	err := db.QueryRow(`SELECT id FROM docs WHERE
+		id = $1 AND uid = $2`, id, uid).Scan(&id)
+
+	return err == nil
 }
 
 func (db *Database) GetDoc(id int32) (d Doc) {
@@ -161,11 +168,46 @@ func (db *Database) AddTags(id int32, tags []string) {
 }
 
 func (db *Database) DelTags(id int32, tags []string) {
-	log.Println("DelTags not implemented")
+	if _, err := db.Query(`DELETE FROM tagsdocs USING tags
+		WHERE
+			tagsdocs.idtag = tags.id
+		AND	tagsdocs.iddoc = $1
+		AND	tags.name IN `+mkarray(tags), id); err != nil {
+			log.Println(err)
+	}
 }
 
-func (db *Database) UpdateContent(id int32, content string) {
-	log.Println("UpdateContent not implemented")
+func (db *Database) UpdateDoc(d *Doc) {
+	old := db.GetDoc(d.Id)
+
+	f := "("; v := "("
+
+	if old.Name != d.Name {
+		f += "name"
+		v += "'"+d.Name+"'"
+	}
+	if old.Type != d.Type {
+		f += ", type"
+		v += ", '"+d.Type+"'"
+	}
+	if old.Content != d.Content {
+		f += ", content"
+		v += ", '"+d.Content+"'"
+	}
+
+	if v != "(" {
+		f += ")"; v += ")"
+		_, err := db.Query(`UPDATE docs SET `+f+` = `+v+`
+			WHERE docs.id = $1`, d.Id)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	if len(d.Tags) > 0 {
+		db.DelTags(d.Id, old.Tags)
+		db.AddTags(d.Id, d.Tags)
+	}
 }
 
 func (db *Database) AddDoc(d *Doc) (id int32) {
@@ -185,8 +227,9 @@ func (db *Database) AddDoc(d *Doc) (id int32) {
 }
 
 func (db *Database) DelDoc(id int32) {
-	log.Println("DelDoc not implemented")
-	return
+	if _, err := db.Query("DELETE FROM docs WHERE docs.id = $1", id); err != nil {
+		log.Println(err)
+	}
 }
 
 func mkarray(ss []string) (res string) {

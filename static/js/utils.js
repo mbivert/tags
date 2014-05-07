@@ -5,8 +5,11 @@ $(document).ready(function(){
 	})
 */
 
-	$('#add').submit(function() {
-		$(this).find("input[name=content]").val($(this).find("#addcol").text())
-	return true
+	$('form').each(function () {
+		$(this).submit(function() {
+			$(this).find("input[name=content]").val(
+				$(this).find("div[name=rcontent]").text())
+			return true
+		})
 	})
 })

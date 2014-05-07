@@ -26,8 +26,8 @@
 					</span>
 				</span>
 			</div>
-			<div class="panel-body panel-collapse collapse in"
-					contenteditable="true" id="addcol">
+			<div name="rcontent" class="panel-body panel-collapse collapse in"
+					contenteditable="true" id="#addcol">
 				{{ template "content" .Empty }}
 			</div>
 			<!-- filled with previous div via js on submit -->
@@ -58,6 +58,7 @@
 	</div>
 	<div id="searchroot" class="panel-group">
 	{{ range .Docs }}
+		<form id="{{ .Id }}e" action="/edit/" method="post">
 		<div class="panel panel-default text-left">
 			<div class="panel-heading">
 				<span class="panel-title">
@@ -83,15 +84,35 @@
 				</span>
 			</div>
 			<div class="panel-collapse collapse" id="{{ .Id }}col">
-				<div class="panel-body" 
+				<div name="rcontent" class="panel-body" 
 				{{ if eq .Uid $uid }}
 					contenteditable="true"
 				{{ end }}>
-
 					{{ template "content" . }}
 				</div>
+
+				{{ if eq .Uid $uid }}
+				<input name="content" type="hidden" value="" />
+				<div class="text-center">
+					<input type="hidden" name="id" value="{{ .Id }}" />
+					<div class="btn-group">
+						<button name="action" value="edit" style="width:50%;"
+							type="submit" class="btn btn-success">
+							Edit
+						</button>
+						<button name="action" value="delete" style="width:50%;"
+							type="submit" class="btn btn-danger">
+							Delete
+						</button>
+					</div>
+				</div>
+				{{ end }}
+
 			</div>
 		</div>
+
+
+		</form>
 	{{ end }}
 	</div>
 </div>
