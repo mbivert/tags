@@ -13,6 +13,7 @@ stags=#
 import (
 	_ "github.com/lib/pq"
 	"database/sql"
+	"errors"
 	"log"
 	"strings"
 )
@@ -26,78 +27,71 @@ type Database struct {
 //func NewDB(dbname string) (db *Database) {
 func NewDB() (db *Database) {
 	tmp, err := sql.Open("postgres",
-//		"dbname="+dbname+" user=stags host=localhost sslmode=disable")
 		"dbname=stags user=stags host=localhost sslmode=disable")
 	if err != nil {
-		log.Fatal("PostgreSQL connection error:", err)
+		LogFatal(err)
 	} else {
 		db = &Database{ tmp, make(map[string]int32) }
-		db.CreateTables()
-		db.LoadTagCache()
+		db.Init()
 	}
 
 	return
 }
 
+func (db *Database) createFatal(descr string) {
+	_, err := db.Query(descr)
+	if err != nil {
+		LogFatal(err)
+	}
+}
+
 // Create tables if needed.
-func (db *Database) CreateTables() {
+func (db *Database) createTables() {
 	row, err := db.Query("SELECT 1 FROM pg_type WHERE typname = 'dtype'")
 	// if dtype doesn't exist, create it.
-	// ADD NEW TYPES AT THE END IN PRODUCTION ENVIRONMENT
+	// XXX ADD NEW TYPES AT THE END IN PRODUCTION
 	if err == nil && !row.Next() {
-		_, err = db.Query(`CREATE TYPE dtype AS ENUM
+		db.createFatal(`CREATE TYPE dtype AS ENUM
 			(
-				'string',
+				'text',
 				'url',
 				'pdf',
-				'ps',
-				'text'
+				'ps'
 			)
 		`)
 	}
-	if err != nil {
-		log.Fatal("Creation of dtype failed: ", err)
-	}
 
-	_, err = db.Query(`CREATE TABLE IF NOT EXISTS
+	db.createFatal(`CREATE TABLE IF NOT EXISTS
 		docs(
 			id			SERIAL,
 			name		TEXT,
 			type		DTYPE,
 			content		TEXT,
+			uid			INT,
 			PRIMARY KEY ("id")
 		)
 	`)
-	if err != nil {
-		log.Fatal("Creation of table docs failed: ", err)
-	}
 
-	_, err = db.Query(`CREATE TABLE IF NOT EXISTS
+	db.createFatal(`CREATE TABLE IF NOT EXISTS
 		tags(
 			id			SERIAL,
 			name		TEXT		UNIQUE,
 			PRIMARY KEY ("id")
 		)
 	`)
-	if err != nil {
-		log.Fatal("Creation of table tags failed: ", err)
-	}
 
-	_, err = db.Query(`CREATE TABLE IF NOT EXISTS
+	db.createFatal(`CREATE TABLE IF NOT EXISTS
 		tagsdocs(
 			idtag		INTEGER	REFERENCES	tags(id),
 			iddoc		INTEGER	REFERENCES	docs(id)
 		)
 	`)
-	if err != nil {
-		log.Fatal("Creation of table tagsdocs failed: ", err)
-	}
 }
 
-func (db *Database) LoadTagCache() {
+func (db *Database) loadTagCache() {
 	rows, err := db.Query("SELECT id, name FROM tags")
 	if err != nil {
-		log.Fatal("Cannot load tag cache")
+		LogFatal(errors.New("Cannot load tag cache"))
 	}
 
 	for rows.Next() {
@@ -108,42 +102,35 @@ func (db *Database) LoadTagCache() {
 	}
 }
 
-// Id is int32 so it matches INTEGER (SERIAL is INTEGER)
-// cf. http://www.postgresql.org/docs/9.3/static/datatype-numeric.html
-// Doc allows data exchange between DB and User.
-// Capitalized name for JSON.
-type Doc struct {
-	Id			int32
-	Name		string
-	Type		string
-	Content		string
-	Tags		[]string
+func (db *Database) Init() {
+	db.createTables()
+	db.loadTagCache()
 }
 
 func (db *Database) GetDoc(id int32) (d Doc) {
 	var tags string
 	err := db.QueryRow(`SELECT docs.id, docs.name, docs.type,
-			docs.content, string_agg(tags.name, U&'\001F') AS tags
+			docs.content, docs.uid, string_agg(tags.name, U&'\001F') AS tags
 		FROM
 			tags, tagsdocs, docs
 		WHERE
 			tagsdocs.idtag = tags.id
 		AND	tagsdocs.iddoc = docs.id
 		AND	docs.id = $1
-		GROUP BY docs.id`, id).Scan(&d.Id, &d.Name, &d.Type, &d.Content, &tags)
+		GROUP BY docs.id`, id).Scan(&d.Id, &d.Name, &d.Type, &d.Content, &d.Uid, &tags)
 	if err != nil {
-		log.Println("Cannot fetch doc", id, ":", err)
+		LogError(err)
 		d.Id = -1
+	} else {
+		d.Tags = strings.Split(tags, TagSep)
 	}
-
-	d.Tags = strings.Split(tags, "\u001F")
 
 	return
 }
 
 func (db *Database) AddTag(tag string) (id int32) {
-	if strings.Contains(tag, "\u001F") {
-		tag = strings.Replace(tag, "\u001F", "", -1)
+	if strings.Contains(tag, TagSep) {
+		tag = strings.Replace(tag, TagSep, "", -1)
 	}
 
 	id = -1
@@ -152,7 +139,7 @@ func (db *Database) AddTag(tag string) (id int32) {
 	err := db.QueryRow(`INSERT INTO tags(name) VALUES($1)
 		RETURNING id`, tag).Scan(&id)
 	if err != nil {
-		log.Println("Cannot add tag:", err)
+		LogError(err)
 	} else {
 		db.tagcache[tag] = id
 	}
@@ -166,7 +153,7 @@ func (db *Database) AddTags(id int32, tags []string) {
 			_, err := db.Query(`INSERT into tagsdocs(idtag, iddoc)
 				VALUES($1, $2)`, idtag, id)
 			if err != nil {
-				log.Println("Cannot tag", id, "with", tag)
+				LogError(err)
 			}
 		}
 		
@@ -181,13 +168,13 @@ func (db *Database) UpdateContent(id int32, content string) {
 	log.Println("UpdateContent not implemented")
 }
 
-func (db *Database) AddDoc(d Doc) (id int32) {
+func (db *Database) AddDoc(d *Doc) (id int32) {
 	id = -1
-	err := db.QueryRow(`INSERT INTO docs(name, type, content)
-		VALUES ($1, $2, $3)
-		RETURNING id`, d.Name, d.Type, d.Content).Scan(&id)
+	err := db.QueryRow(`INSERT INTO docs(name, type, content, uid)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id`, d.Name, d.Type, d.Content, d.Uid).Scan(&id)
 	if err != nil {
-		log.Println("Error while adding doc:", err)
+		LogError(err)
 	}
 
 	if id != -1 {
@@ -217,18 +204,22 @@ func mkarray(ss []string) (res string) {
 // upon filtering : fetch every item which contains all the mandatory
 // tag, fetch them and do additional filtering here and not with SQL.
 // XXX add a cache id<->tags to avoid request
-func (db *Database) GetDocs(tags []string) (ds []Doc) {
+func (db *Database) GetDocs(uid int32, tags []string) (ds []Doc) {
+	if len(tags) == 0 { return }
+
 	rows, err := db.Query(`SELECT docs.id
 			FROM
 				tags, tagsdocs, docs
 			WHERE
-				tagsdocs.idtag = tags.id
-			AND	tagsdocs.iddoc = docs.id
+				tagsdocs.idtag	= tags.id
+			AND	tagsdocs.iddoc	= docs.id
+			AND	(docs.uid		= $1
+			OR	tags.name = ':public')
 			AND tags.name IN `+mkarray(tags)+`
 			GROUP BY docs.id
-			HAVING COUNT(docs.id) = $1`, len(tags))
+			HAVING COUNT(docs.id) = $2`, uid, len(tags))
 	if err != nil {
-		log.Println("Cannot fetch with tags ", tags, ":", err)
+		LogError(err)
 		return
 	}
 

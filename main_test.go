@@ -26,6 +26,7 @@ var docs = []testdocs {
 			"Name"		:	"nice website",
 			"Type"		:	"url",
 			"Content"	:	"http://awesom.eu",
+			"Uid"		:	1,
 			"Tags"		:	["irc", "awesom", "index"]
 		}`),
 		true,
@@ -36,6 +37,7 @@ var docs = []testdocs {
 			"Name"		:	"nice website",
 			"Type"		:	"badtype",
 			"Content"	:	"http://awesom.eu",
+			"Uid"		:	1,
 			"Tags"		:	["irc", "awesom", "index"]
 		}`),
 		false,	// bad type
@@ -46,6 +48,7 @@ var docs = []testdocs {
 			"Name"		:	"bad tag",
 			"Type"		:	"text",
 			"Content"	:	"whatever",
+			"Uid"		:	1,
 			"Tags"		:	["bad\u001Ftag"]
 		}`),
 		true,
@@ -56,6 +59,7 @@ var docs = []testdocs {
 			"Name"		:	"The ArXiV",
 			"Type"		:	"url",
 			"Content"	:	"http://arxiv.org/",
+			"Uid"		:	1,
 			"Tags"		:	["papers", "maths", "physics"]
 		}`),
 		true,
@@ -66,6 +70,7 @@ var docs = []testdocs {
 			"Name"		:	"/r/physics",
 			"Type"		:	"url",
 			"Content"	:	"http://www.reddit.com/r/physics/",
+			"Uid"		:	1,
 			"Tags"		:	["bookmarks", "physics", "/r/"]
 		}`),
 		true,
@@ -76,6 +81,7 @@ var docs = []testdocs {
 			"Name"		:	"/r/programming",
 			"Type"		:	"url",
 			"Content"	:	"http://www.reddit.com/r/programming/",
+			"Uid"		:	1,
 			"Tags"		:	["bookmarks", "programming", "/r/"]
 		}`),
 		true,
@@ -86,6 +92,7 @@ var docs = []testdocs {
 			"Name"		:	"Hacker News",
 			"Type"		:	"url",
 			"Content"	:	"https://news.ycombinator.com/",
+			"Uid"		:	1,
 			"Tags"		:	["bookmarks", "programming" ]
 		}`),
 		true,
@@ -96,6 +103,7 @@ var docs = []testdocs {
 			"Name"		:	"Slashdot",
 			"Type"		:	"url",
 			"Content"	:	"http://beta.slashdot.org/",
+			"Uid"		:	1,
 			"Tags"		:	["bookmarks", "programming", "physics", "science" ]
 		}`),
 		true,
@@ -106,6 +114,7 @@ var docs = []testdocs {
 			"Name"		:	"Slackware",
 			"Type"		:	"url",
 			"Content"	:	"http://www.slackware.com/",
+			"Uid"		:	1,
 			"Tags"		:	["bookmarks", "linux", "slackware" ]
 		}`),
 		true,
@@ -151,6 +160,7 @@ func TestDocs(t *testing.T) {
 		var d Doc
 		err := json.Unmarshal(doc.json, &d)
 		if err != nil {
+			t.Log(string(doc.json))
 			t.Error("Cannot retrieve doc:", err)
 		}
 		id := testdb.AddDoc(d)
@@ -175,7 +185,7 @@ func TestDocs(t *testing.T) {
 			}
 			for _, t1 := range d.Tags {
 				// Remove separator in tag
-				t1 = strings.Replace(t1, "\u001F", "", -1)
+				t1 = strings.Replace(t1, TagSep, "", -1)
 				found := false
 				for _, t2 := range d2.Tags {
 					if t2 == t1 { found = true }
@@ -189,7 +199,7 @@ func TestDocs(t *testing.T) {
 
 	// Launch every query
 	for _, query := range queries {
-		ds := testdb.GetDocs(query.query)
+		ds := testdb.GetDocs(1, query.query)
 		if len(ds) != len(query.results) {
 			t.Log(len(ds), ds)
 			t.Log(len(query.results), query.results)
