@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"github.com/dchest/captcha"
 	"html/template"
@@ -18,7 +19,7 @@ var ltmpl = template.Must(
 	template.New("login.html").ParseFiles("templates/login.html"))
 
 var utmpl = template.Must(
-	template.New("user.html").Funcs( template.FuncMap{
+	template.New("user.html").Funcs(template.FuncMap{
 		"GetTags": func(tags []string) string {
 			return strings.Join(tags, ", ")
 		},
@@ -31,6 +32,9 @@ var utmpl = template.Must(
 			return false
 		},
 	}).ParseFiles("templates/user.html"))
+
+var ntmpl = template.Must(
+	template.New("navbar.html").ParseFiles("templates/navbar.html"))
 
 func splitTags(tags string) []string {
 	return strings.FieldsFunc(tags, func(r rune) bool {
@@ -47,142 +51,114 @@ func getType(c string) string {
 	// "^((f|ht)tps?:// | [A-Z]:\\ | /)"
 	switch {
 	case strings.HasPrefix(c, "http://"),
-		 strings.HasPrefix(c, "https?://"),
-		 strings.HasPrefix(c, "ftp://"),
-		 strings.HasPrefix(c, "ftps://"),
-		 strings.HasPrefix(c, "C:"),
-		 strings.HasPrefix(c, "/"):
+		strings.HasPrefix(c, "https?://"),
+		strings.HasPrefix(c, "ftp://"),
+		strings.HasPrefix(c, "ftps://"),
+		strings.HasPrefix(c, "C:"),
+		strings.HasPrefix(c, "/"):
 		return "url"
 	default:
 		return "text"
 	}
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	writeFiles(w, "templates/header.html", GetNavbar(r),
-		"templates/index.html", "templates/footer.html")
+func index(w http.ResponseWriter, r *http.Request, _ int32) {
+	writeFiles(w, "templates/index.html")
 }
 
-func getLogin(w http.ResponseWriter, r *http.Request) {
-	writeFiles(w, "templates/header.html", "templates/navbar.html")
-
-	d := struct { CaptchaId string }{ captcha.New() }
-
-	if err := ltmpl.Execute(w, &d); err != nil {
-		LogHttp(w, err); return
-	}
-
-	writeFiles(w, "templates/footer.html")
-}
-
-func postLogin(w http.ResponseWriter, r *http.Request) {
-/*
-	if !captcha.VerifyString(r.FormValue("captchaId"), r.FormValue("captchaRes")) {
-		w.Write([]byte("<p>Bad captcha; try again. </p>"))
-		return
-	}
-*/
-	// login may be email, name or token
-	login := r.FormValue("login");
-
-	resp, err := alogin(login)
-	if err != nil {
-		LogHttp(w, err); return
-	}
-
-	switch resp {
-	// received a valid token, effectively login the user
-	case "ok":
-		// fetch id from server
-		udata, err := info(login)
-		if err != nil { LogHttp(w, err); return }
-		id := strings.Split(udata, "\n")[0]
-
-		// generate a new token
-		token, _ := chain(login)
-		setToken(w, token, id)
-
-		// everything went well, redirect
-		http.Redirect(w, r, "/user/", http.StatusFound)
-
-	// wrong data.
-	case "ko":
-		w.Write([]byte("<p>Wrong token/email/name; retry</p>"))
-
-	// new token has been generated
-	case "new":
-		w.Write([]byte(`<p>Check your AAS account, and <a href="/login">login</a>!</p>`))
-	}
-}
-
-func login(w http.ResponseWriter, r *http.Request) {
+func login(w http.ResponseWriter, r *http.Request, _ int32) {
 	switch r.Method {
 	case "GET":
-		getLogin(w, r)
+		d := struct{ CaptchaId string }{captcha.New()}
+		if err := ltmpl.Execute(w, &d); err != nil {
+			LogHttp(w, err)
+			return
+		}
 	case "POST":
-		postLogin(w, r)
+		/*
+			if !captcha.VerifyString(r.FormValue("captchaId"), r.FormValue("captchaRes")) {
+				w.Write([]byte("<p>Bad captcha; try again. </p>"))
+				return
+			}
+		*/
+		// login may be email, name or token
+		login := r.FormValue("login")
+
+		resp, err := login2(login)
+		if err != nil {
+			LogHttp(w, err)
+			return
+		}
+
+		switch resp {
+		// received a valid token, effectively login the user
+		case "ok":
+			// fetch id from server
+			udata, err := info(login)
+			if err != nil {
+				LogHttp(w, err)
+				return
+			}
+			uid, _ := strconv.ParseInt(strings.Split(udata, "\n")[0], 10, 32)
+
+			// generate a new token
+			token, _ := chain(login)
+			setToken(w, token, int32(uid))
+
+			// everything went well, redirect
+			http.Redirect(w, r, "/user/", http.StatusFound)
+		// wrong data.
+		case "ko":
+			SetError(w, errors.New("Wrong token/email/name"))
+			http.Redirect(w, r, "/login", http.StatusFound)
+		// new token has been generated
+		case "new":
+			SetInfo(w, "Check your AAS account!")
+			http.Redirect(w, r, "/login", http.StatusFound)
+		}
 	}
 }
 
-func logout(w http.ResponseWriter, r *http.Request) {
-	unsetToken(w)
-
+func logout(w http.ResponseWriter, r *http.Request, _ int32) {
+	// XXX can safely getToken() here as
+	// logout is not in mustauth
+	if token, _, err := getToken(r); err == nil {
+		logout2(token)
+		unsetToken(w)
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func user(w http.ResponseWriter, r *http.Request) {
-	// check connection information; get id
-	idstr, err := checkToken(w, r)
-	if err != nil {
-		w.Write([]byte(`<p>Please <a href="/login">login</a></p>.`))
-		return
-	}
-
-	i, _ := strconv.ParseInt(idstr, 10, 32)
-	uid := int32(i)
-
-	writeFiles(w, "templates/header.html", "templates/navbar2.html")
-
+func user(w http.ResponseWriter, r *http.Request, uid int32) {
 	// fetch docs
-	tags := r.FormValue("search")
-
-	docs := db.GetDocs(uid, splitTags(tags))
+	docs := db.GetDocs(uid, splitTags(r.FormValue("search")))
 
 	d := struct {
-		Empty	Doc
-		Docs	[]Doc
-		Uid		int32
-	} { Doc{ uid, "", "", "Some content", -1, []string{""} }, docs, uid }
+		Empty Doc
+		Docs  []Doc
+		Uid   int32
+	}{Doc{uid, "", "", "Some content", -1, []string{""}}, docs, uid}
 
 	if err := utmpl.Execute(w, &d); err != nil {
-		LogHttp(w, err); return
-	}
-
-	writeFiles(w, "templates/footer.html")
-}
-
-func add(w http.ResponseWriter, r *http.Request) {
-	// check if connected
-	idstr, err := checkToken(w, r)
-	if err != nil {
-		w.Write([]byte(`<p>Please <a href="/login">login</a></p>.`))
+		LogHttp(w, err)
 		return
 	}
+}
 
-	i, _ := strconv.ParseInt(idstr, 10, 32)
-	uid := int32(i)
-
+func add(w http.ResponseWriter, r *http.Request, uid int32) {
 	name := r.FormValue("name")
 	tags := splitTags(r.FormValue("tags"))
 	// XXX element not added (can't be retrieved)
-	if len(tags) == 0 { return }
+	if len(tags) == 0 {
+		return
+	}
 
 	content := strings.TrimSpace(r.FormValue("content"))
 	typ := getType(content)
 
-	id := db.AddDoc(&Doc{-1, name, typ, content, uid, tags })
+	id := db.AddDoc(&Doc{-1, name, typ, content, uid, tags})
 	if id == -1 {
-		// XXX element not added (stuff may already exists)
+		SetError(w, errors.New("Can't add that (weird)"))
 		return
 	}
 
@@ -190,31 +166,25 @@ func add(w http.ResponseWriter, r *http.Request) {
 }
 
 // edit document (delete too)
-func edit(w http.ResponseWriter, r *http.Request) {
-	// check if connected
-	idstr, err := checkToken(w, r)
-	if err != nil {
-		w.Write([]byte(`<p>Please <a href="/login">login</a></p>.`))
-		return
-	}
-
-	i, _ := strconv.ParseInt(idstr, 10, 32)
-	uid := int32(i)
-
-	i, _ = strconv.ParseInt(r.FormValue("id"), 10, 32)
+func edit(w http.ResponseWriter, r *http.Request, uid int32) {
+	i, _ := strconv.ParseInt(r.FormValue("id"), 10, 32)
 	id := int32(i)
 
-	if !db.HasOwner(id, uid) { return }
+	if !db.HasOwner(id, uid) {
+		SetError(w, errors.New("You don't own this."))
+		http.Redirect(w, r, "/user/", http.StatusFound)
+	}
 
 	switch r.FormValue("action") {
 	case "edit":
 		name := r.FormValue("name")
 		tags := splitTags(r.FormValue("tags"))
-		if len(tags) == 0 { return }
+		if len(tags) == 0 {
+			return
+		}
 		content := strings.TrimSpace(r.FormValue("content"))
 		typ := getType(content)
-		db.UpdateDoc(&Doc{ id, name, typ, content, uid, tags })
-
+		db.UpdateDoc(&Doc{id, name, typ, content, uid, tags})
 	case "delete":
 		db.DelDoc(id)
 	}
@@ -222,18 +192,67 @@ func edit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/user/", http.StatusFound)
 }
 
+var tagsfuncs = map[string]func(http.ResponseWriter, *http.Request, int32){
+	"":       index,
+	"login":  login,
+	"logout": logout,
+	"user":   user,
+	"add":    add,
+	"edit":   edit,
+	//	"settings"	:	settings,
+}
+
+var mustauth = map[string]bool{
+	"user": true,
+	"add":  true,
+	"edit": true,
+	//	"settings"	:	true,
+}
+
+func tags(w http.ResponseWriter, r *http.Request) {
+	var uid int32
+
+	f := r.URL.Path[1:]
+	if len(f) != 0 && f[len(f)-1] == '/' {
+		f = f[:len(f)-1]
+	}
+
+	if tagsfuncs[f] == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// pages requiring to be connected
+	if mustauth[f] {
+		var err error
+		uid, err = ChainToken(w, r)
+		if err != nil {
+			SetError(w, errors.New("Invalid token"))
+			http.Redirect(w, r, "/", http.StatusFound)
+		}
+	}
+
+	if (r.Method == "GET" && f != "logout") || f == "user" {
+		writeFiles(w, "templates/header.html")
+		d := struct{ Connected bool }{Connected: uid > 0}
+		if err := ntmpl.Execute(w, &d); err != nil {
+			log.Println(err)
+		}
+	}
+
+	tagsfuncs[f](w, r, uid)
+
+	if (r.Method == "GET" && f != "logout") || f == "user" {
+		writeFiles(w, "templates/footer.html")
+	}
+}
+
 func main() {
 	db = NewDB()
 
-	http.HandleFunc("/", index)
-	http.HandleFunc("/login/", login)
-	http.HandleFunc("/logout/", logout)
-	http.HandleFunc("/user/", user)
-	http.HandleFunc("/add/", add)
-	http.HandleFunc("/edit/", edit)
+	http.HandleFunc("/", tags)
 
 	// TODO automatically tag :bookmark for type=url
-//	http.HandleFunc("/settings/", settings)
 
 	// Captchas
 	http.Handle("/captcha/",
@@ -243,7 +262,7 @@ func main() {
 		http.StripPrefix("/static/",
 			http.FileServer(http.Dir("static"))))
 
-	log.Print("Launching on http://localhost:"+*port)
+	log.Print("Launching on http://localhost:" + *port)
 
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }

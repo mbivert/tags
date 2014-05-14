@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
+	"strings"
 )
 
 // LogError calls log.Printf on error, and adds location in source code
@@ -39,16 +40,6 @@ func LogFatal(err error) {
 	
 }
 
-func GetNavbar(r *http.Request) string {
-	navbar := "templates/navbar.html"
-	
-	if ok, _, _ := getToken(r); ok != "" {
-		navbar = "templates/navbar2.html"
-	}
-
-	return navbar
-}
-
 func ko(w http.ResponseWriter) {
 	w.Write([]byte("ko"))
 }
@@ -62,4 +53,17 @@ func writeFiles(w http.ResponseWriter, fs ...string) error {
 		w.Write(b)
 	}
 	return nil
+}
+
+func SetInfo(w http.ResponseWriter, msg string) {
+	cookie := &http.Cookie {
+		Name	:	"tags-info",
+		Value	:	strings.Replace(msg, " ", "_", -1),
+		Path	:	"/",
+	}
+	http.SetCookie(w, cookie)
+}
+
+func SetError(w http.ResponseWriter, err error) {
+	SetInfo(w, "Error: "+err.Error())
 }

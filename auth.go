@@ -12,8 +12,8 @@ import (
 
 const (
 	authserver	=	"http://localhost:8080/"
-	key = "4iXZNYbRYL6DbB4SHHyq6EtpEVCBvMebiUDfjPU1KeNd5Rv6BWVC85HKTmqcvKZJ"
-	cname = "thipi-token"
+	key = "ksRHqsXJwvzyKUZXAybXR8BJjMu7fkseQWGXKKeiTapqu8YrcY9fsyXp92eTxR1V"
+	cname = "tags-token"
 )
 
 var hashKey = []byte(securecookie.GenerateRandomKey(32))
@@ -42,7 +42,7 @@ func mkr(descr string) (string, error) {
 func update() {
 }
 
-func alogin(login string) (string, error) {
+func login2(login string) (string, error) {
 	return mkr("login?login="+login)
 }
 
@@ -54,27 +54,31 @@ func info(token string) (string, error) {
 	return mkr("info?token="+token)
 }
 
+func logout2(token string) {
+	mkr("logout?token="+token)
+}
+
 // retrieve token; chain it to the auth server
 // return data stored in cookie or err
-func checkToken(w http.ResponseWriter, r *http.Request) (string, error) {
-	token, d, err := getToken(r)
+func ChainToken(w http.ResponseWriter, r *http.Request) (int32, error) {
+	token, uid, err := getToken(r)
 	if err == nil { token, err = chain(token) }
-	if err != nil { LogError(err); return "", err }
+	if err != nil { LogError(err); return 0, err }
 
 	if token == "ko" {
-		return "", errors.New("bad token")
+		return 0, errors.New("bad token")
 	}
 
 	// previous token was valid, set new token
-	err = setToken(w, token, d)
+	err = setToken(w, token, uid)
 
-	return d, err
+	return uid, err
 }
 
-func setToken(w http.ResponseWriter, token, d string) error {
-	value := map[string]string{
+func setToken(w http.ResponseWriter, token string, uid int32) error {
+	value := map[string]interface{}{
 		"token"	:	token,
-		"data"	:	d,
+		"uid"	:	uid,
      	}
   
 	if encoded, err := s.Encode(cname, value); err == nil {
@@ -94,21 +98,20 @@ func setToken(w http.ResponseWriter, token, d string) error {
 func unsetToken(w http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:	cname,
-		Value:	"",
 		Path:	"/",
 		MaxAge:	-1,
 	}
 	http.SetCookie(w, cookie)
 }
 
-func getToken(r *http.Request) (token, d string, err error) {
+func getToken(r *http.Request) (token string, uid int32, err error) {
 	if cookie, err := r.Cookie(cname); err == nil {
-		value := map[string]string{}
+		value := map[string]interface{}{}
 
 		if err = s.Decode(cname, cookie.Value, &value); err == nil {
-			return value["token"], value["data"], nil
+			return value["token"].(string), value["uid"].(int32), nil
 		}
 	}
 
-	return "", "", err
+	return "", 0, err
 }
