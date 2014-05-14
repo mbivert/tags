@@ -1,6 +1,7 @@
 {{ define "content" }}
 	{{ if eq .Type "url" }}
-		<a href="{{ .Content }}">{{ .Content }}</a>
+		<a href="{{ GetURL .Content }}">{{ GetURL .Content }}</a> <br />
+		{{  GetComment .Content }}
 	{{ else }}
 		{{ .Content }}
 	{{ end }}

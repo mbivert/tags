@@ -5,10 +5,16 @@ $(document).ready(function(){
 	})
 */
 
+	function mkcontent(c) {
+		c = String(c).replace(/<br[^>]*>/g, "\n")
+		c = c.replace(/<[^>]+>/g, "")
+		return c
+	}
+
 	$('form').each(function () {
 		$(this).submit(function() {
 			$(this).find("input[name=content]").val(
-				$(this).find("div[name=rcontent]").text())
+				mkcontent($(this).find("div[name=rcontent]").html()))
 			return true
 		})
 	})

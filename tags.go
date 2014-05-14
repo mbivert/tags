@@ -31,6 +31,18 @@ var utmpl = template.Must(
 			}
 			return false
 		},
+		// XXX allows comment to be inserted on subsequent lines.
+		"GetURL" : func(url string) string {
+			return strings.SplitN(url, "\n", 2)[0]
+		},
+		"GetComment" : func(url string) string {
+			ret := strings.SplitN(url, "\n", 2)
+			if len(ret) == 2 {
+				return ret[1]
+			} else {
+				return ""
+			}
+		},
 	}).ParseFiles("templates/user.html"))
 
 var ntmpl = template.Must(
@@ -150,6 +162,8 @@ func add(w http.ResponseWriter, r *http.Request, uid int32) {
 	tags := splitTags(r.FormValue("tags"))
 	// XXX element not added (can't be retrieved)
 	if len(tags) == 0 {
+		SetError(w, errors.New("At least one tag is required"))
+		http.Redirect(w, r, "/user/", http.StatusFound)
 		return
 	}
 
@@ -159,6 +173,7 @@ func add(w http.ResponseWriter, r *http.Request, uid int32) {
 	id := db.AddDoc(&Doc{-1, name, typ, content, uid, tags})
 	if id == -1 {
 		SetError(w, errors.New("Can't add that (weird)"))
+		http.Redirect(w, r, "/user/", http.StatusFound)
 		return
 	}
 
@@ -174,6 +189,8 @@ func edit(w http.ResponseWriter, r *http.Request, uid int32) {
 		SetError(w, errors.New("You don't own this."))
 		http.Redirect(w, r, "/user/", http.StatusFound)
 	}
+
+	log.Println(strings.TrimSpace(r.FormValue("content")))
 
 	switch r.FormValue("action") {
 	case "edit":
@@ -199,14 +216,14 @@ var tagsfuncs = map[string]func(http.ResponseWriter, *http.Request, int32){
 	"user":   user,
 	"add":    add,
 	"edit":   edit,
-	//	"settings"	:	settings,
+//	"settings"	:	settings,
 }
 
 var mustauth = map[string]bool{
 	"user": true,
 	"add":  true,
 	"edit": true,
-	//	"settings"	:	true,
+//	"settings"	:	true,
 }
 
 func tags(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +247,9 @@ func tags(w http.ResponseWriter, r *http.Request) {
 			SetError(w, errors.New("Invalid token"))
 			http.Redirect(w, r, "/", http.StatusFound)
 		}
+	} else {
+		// XXX try getting uid nevertheless (navbar display...)
+		_, uid, _ = getToken(r)
 	}
 
 	if (r.Method == "GET" && f != "logout") || f == "user" {

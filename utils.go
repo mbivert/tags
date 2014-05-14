@@ -67,3 +67,7 @@ func SetInfo(w http.ResponseWriter, msg string) {
 func SetError(w http.ResponseWriter, err error) {
 	SetInfo(w, "Error: "+err.Error())
 }
+
+func q(s string) string {
+	return "'"+s+"'"
+}

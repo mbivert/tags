@@ -179,25 +179,21 @@ func (db *Database) DelTags(id int32, tags []string) {
 
 func (db *Database) UpdateDoc(d *Doc) {
 	old := db.GetDoc(d.Id)
-
-	f := "("; v := "("
+	a, b, n := make([]string, 3), make([]string, 3), 0
 
 	if old.Name != d.Name {
-		f += "name"
-		v += "'"+d.Name+"'"
+		a[n], b[n], n = "name", q(d.Name), n+1
 	}
 	if old.Type != d.Type {
-		f += ", type"
-		v += ", '"+d.Type+"'"
+		a[n], b[n], n = "type", q(d.Type), n+1
 	}
 	if old.Content != d.Content {
-		f += ", content"
-		v += ", '"+d.Content+"'"
+		a[n], b[n], n = "content", q(d.Content), n+1
 	}
 
-	if v != "(" {
-		f += ")"; v += ")"
-		_, err := db.Query(`UPDATE docs SET `+f+` = `+v+`
+	if n > 0 {
+		as, bs := strings.Join(a[:n], ", "), strings.Join(b[:n], ", ")
+		_, err := db.Query(`UPDATE docs SET (`+as+`) = (`+bs+`)
 			WHERE docs.id = $1`, d.Id)
 		if err != nil {
 			log.Println(err)
