@@ -184,6 +184,7 @@ func edit(w http.ResponseWriter, r *http.Request, uid int32) {
 	if !db.HasOwner(id, uid) {
 		SetError(w, errors.New("You don't own this."))
 		http.Redirect(w, r, "/user/", http.StatusFound)
+		return
 	}
 
 	log.Println(strings.TrimSpace(r.FormValue("content")))
@@ -242,6 +243,7 @@ func tags(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			SetError(w, errors.New("Invalid token"))
 			http.Redirect(w, r, "/", http.StatusFound)
+			return
 		}
 	} else {
 		// XXX try getting uid nevertheless (navbar display...)
