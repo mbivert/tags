@@ -16,6 +16,7 @@ import (
 	"errors"
 	"log"
 	"strings"
+	"strconv"
 )
 
 type Database struct {
@@ -168,12 +169,16 @@ func (db *Database) AddTags(id int32, tags []string) {
 }
 
 func (db *Database) DelTags(id int32, tags []string) {
-	if _, err := db.Query(`DELETE FROM tagsdocs USING tags
+	if stmt, err := db.Prepare(`DELETE FROM tagsdocs USING tags
 		WHERE
 			tagsdocs.idtag = tags.id
 		AND	tagsdocs.iddoc = $1
-		AND	tags.name IN `+mkarray(tags), id); err != nil {
+		AND	tags.name IN `+mkan(2, len(tags))); err != nil {
 			log.Println(err)
+	} else {
+		if _, err := stmt.Query(id, tags); err != nil {
+			log.Println(err)
+		}
 	}
 }
 
@@ -228,11 +233,11 @@ func (db *Database) DelDoc(id int32) {
 	}
 }
 
-func mkarray(ss []string) (res string) {
+func mkan(b, n int) (res string) {
 	res = "("
-	for i, s := range ss {
-		res += "'"+s+"'"
-		if i < len(ss)-1 { res += "," }
+	for i := 0; i < n; i++ {
+		res += "'$"+strconv.Itoa(b+i)+"'"
+		if i < n-1 { res += "," }
 	}
 	res += ")"
 	return
@@ -252,7 +257,8 @@ func (db *Database) GetDocs(uid int32, tags []string) (ds []Doc) {
 		rows, err = db.Query(`SELECT id FROM docs
 			WHERE uid = $1`, uid)
 	} else {
-		rows, err = db.Query(`SELECT docs.id
+		var stmt *sql.Stmt
+		stmt, err = db.Prepare(`SELECT docs.id
 				FROM
 					tags, tagsdocs, docs
 				WHERE
@@ -260,9 +266,11 @@ func (db *Database) GetDocs(uid int32, tags []string) (ds []Doc) {
 				AND	tagsdocs.iddoc	= docs.id
 				AND	(docs.uid		= $1
 				OR	tags.name = ':public')
-				AND tags.name IN `+mkarray(tags)+`
+				AND tags.name IN `+mkan(3, len(tags))+`
 				GROUP BY docs.id
-				HAVING COUNT(docs.id) = $2`, uid, len(tags))
+				HAVING COUNT(docs.id) = $2`)
+
+		rows, err = stmt.Query(uid, len(tags), tags)
 	}
 
 	if err != nil {
