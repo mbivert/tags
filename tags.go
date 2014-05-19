@@ -3,50 +3,53 @@ package main
 import (
 	"errors"
 	"flag"
-	"github.com/dchest/captcha"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-var port = flag.String("port", "8082", "Listening HTTP port")
+var (
+	port = flag.String("port", "8082", "Listening HTTP port")
 
-var db *Database
+	db *Database
+	loginForm []byte
 
-var ltmpl = template.Must(
-	template.New("login.html").ParseFiles("templates/login.html"))
+	ltmpl = template.Must(
+		template.New("login.html").ParseFiles("templates/login.html"))
 
-var utmpl = template.Must(
-	template.New("user.html").Funcs(template.FuncMap{
-		"GetTags": func(tags []string) string {
-			return strings.Join(tags, ", ")
-		},
-		// from rsc'eq
-		"eq": func(x, y interface{}) bool {
-			switch x := x.(type) {
-			case string, int, int64, int32:
-				return x == y
-			}
-			return false
-		},
-		// XXX allows comment to be inserted on subsequent lines.
-		"GetURL" : func(url string) string {
-			return strings.SplitN(url, "\n", 2)[0]
-		},
-		"GetComment" : func(url string) string {
-			ret := strings.SplitN(url, "\n", 2)
-			if len(ret) == 2 {
-				return ret[1]
-			} else {
-				return ""
-			}
-		},
-	}).ParseFiles("templates/user.html"))
+	utmpl = template.Must(
+		template.New("user.html").Funcs(template.FuncMap{
+			"GetTags": func(tags []string) string {
+				return strings.Join(tags, ", ")
+			},
+			// from rsc'eq
+			"eq": func(x, y interface{}) bool {
+				switch x := x.(type) {
+				case string, int, int64, int32:
+					return x == y
+				}
+				return false
+			},
+			// XXX allows comment to be inserted on subsequent lines.
+			"GetURL" : func(url string) string {
+				return strings.SplitN(url, "\n", 2)[0]
+			},
+			"GetComment" : func(url string) string {
+				ret := strings.SplitN(url, "\n", 2)
+				if len(ret) == 2 {
+					return ret[1]
+				} else {
+					return ""
+				}
+			},
+		}).ParseFiles("templates/user.html"))
 
-var ntmpl = template.Must(
-	template.New("navbar.html").ParseFiles("templates/navbar.html"))
+	ntmpl = template.Must(
+		template.New("navbar.html").ParseFiles("templates/navbar.html"))
+)
 
 func splitTags(tags string) []string {
 	return strings.FieldsFunc(tags, func(r rune) bool {
@@ -81,18 +84,8 @@ func index(w http.ResponseWriter, r *http.Request, _ int32) {
 func login(w http.ResponseWriter, r *http.Request, _ int32) {
 	switch r.Method {
 	case "GET":
-		d := struct{ CaptchaId string }{captcha.New()}
-		if err := ltmpl.Execute(w, &d); err != nil {
-			LogHttp(w, err)
-			return
-		}
+		w.Write(loginForm)
 	case "POST":
-		/*
-			if !captcha.VerifyString(r.FormValue("captchaId"), r.FormValue("captchaRes")) {
-				w.Write([]byte("<p>Bad captcha; try again. </p>"))
-				return
-			}
-		*/
 		// login may be email, name or token
 		login := r.FormValue("login")
 
@@ -268,15 +261,18 @@ func tags(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	var err error
+
+	loginForm, err = ioutil.ReadFile("templates/login.html")
+	if err != nil {
+		log.Println(err)
+	}
+
 	db = NewDB()
 
 	http.HandleFunc("/", tags)
 
 	// TODO automatically tag :bookmark for type=url
-
-	// Captchas
-	http.Handle("/captcha/",
-		captcha.Server(captcha.StdWidth, captcha.StdHeight))
 
 	http.Handle("/static/",
 		http.StripPrefix("/static/",

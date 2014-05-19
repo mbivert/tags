@@ -5,25 +5,5 @@
 		<input autocomplete="off" name="login" type="text" class="form-control" placeholder="Token, username or email" />
 	</div>
 	<p> If you have no token, let this empty. You will soon receive a new one. </p>
-	<p><img id="image" src="/captcha/{{.CaptchaId}}.png" alt="Captcha image"></p>
-	<p> (Reload for new captcha) </p>
-	<input type="hidden" name="captchaId" value="{{.CaptchaId}}" /><br>
-	<input type="text" name="captchasol" /><br />
-	<input class="btn btn-success btn-lg" type="submit" value="Login" />
-	<script>
-		function setSrcQuery(e, q) {
-			var src = e.src;
-			var p = src.indexOf('?');
-			if (p >= 0) {
-				src = src.substr(0, p);
-			}
-			e.src = src + "?" + q
-		}
-
-		function reload() {
-			setSrcQuery(document.getElementById('image'), "reload=" + (new Date()).getTime());
-			return false;
-		}
-	</script>
 </form>
 </div>
