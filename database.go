@@ -244,19 +244,27 @@ func mkarray(ss []string) (res string) {
 // tag, fetch them and do additional filtering here and not with SQL.
 // XXX add a cache id<->tags to avoid request
 func (db *Database) GetDocs(uid int32, tags []string) (ds []Doc) {
-	if len(tags) == 0 { return }
+	var rows *sql.Rows
+	var err error
 
-	rows, err := db.Query(`SELECT docs.id
-			FROM
-				tags, tagsdocs, docs
-			WHERE
-				tagsdocs.idtag	= tags.id
-			AND	tagsdocs.iddoc	= docs.id
-			AND	(docs.uid		= $1
-			OR	tags.name = ':public')
-			AND tags.name IN `+mkarray(tags)+`
-			GROUP BY docs.id
-			HAVING COUNT(docs.id) = $2`, uid, len(tags))
+	// select all docs from uid
+	if len(tags) == 0 {
+		rows, err = db.Query(`SELECT id FROM docs
+			WHERE uid = $1`, uid)
+	} else {
+		rows, err = db.Query(`SELECT docs.id
+				FROM
+					tags, tagsdocs, docs
+				WHERE
+					tagsdocs.idtag	= tags.id
+				AND	tagsdocs.iddoc	= docs.id
+				AND	(docs.uid		= $1
+				OR	tags.name = ':public')
+				AND tags.name IN `+mkarray(tags)+`
+				GROUP BY docs.id
+				HAVING COUNT(docs.id) = $2`, uid, len(tags))
+	}
+
 	if err != nil {
 		LogError(err)
 		return
