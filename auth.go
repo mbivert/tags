@@ -11,14 +11,19 @@ import (
 )
 
 const (
-	authserver	=	"http://localhost:8080/"
-	key = "ksRHqsXJwvzyKUZXAybXR8BJjMu7fkseQWGXKKeiTapqu8YrcY9fsyXp92eTxR1V"
+	authserver	=	"https://localhost:8080/"
+	key = "yaki6m6XctAFmKjJupcPkWAEbFSvpxNHifch4Nyx44aAnAzBBYtZ8UqKbzRUqJnr"
 	cname = "tags-token"
+
 )
 
-var hashKey = []byte(securecookie.GenerateRandomKey(32))
-var blockKey = []byte(securecookie.GenerateRandomKey(32))
-var s = securecookie.New(hashKey, blockKey)
+var (
+	Client = &http.Client{}
+
+	hashKey = []byte(securecookie.GenerateRandomKey(32))
+	blockKey = []byte(securecookie.GenerateRandomKey(32))
+	s = securecookie.New(hashKey, blockKey)
+)
 
 // Clean name for safe mkdir
 func cleanName(name string) string {
@@ -28,7 +33,7 @@ func cleanName(name string) string {
 }
 
 func mkr(descr string) (string, error) {
-	resp, err := http.Get(authserver+"/api/"+descr+"&key="+key)
+	resp, err := Client.Get(authserver+"/api/"+descr+"&key="+key)
 	// XXX make sure err doesn't embed sensible data (eg. key…)
 	if err != nil { return "", err }
 

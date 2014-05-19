@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"html/template"
@@ -13,6 +15,7 @@ import (
 
 var (
 	port = flag.String("port", "8082", "Listening HTTP port")
+	ssl = flag.Bool("ssl", true, "Use SSL")
 
 	db *Database
 	loginForm []byte
@@ -265,9 +268,30 @@ func main() {
 
 	loginForm, err = ioutil.ReadFile("templates/login.html")
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 	}
 
+	// load auth certificate
+	pem, err := ioutil.ReadFile("auth-cert.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	certs := x509.NewCertPool()
+	if !certs.AppendCertsFromPEM(pem) {
+		log.Fatal(errors.New("can't add auth-cert.pem"))
+	}
+
+	// create Client for auth requests
+	Client = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: certs,
+			},
+		},
+	}
+
+	// Load Database
 	db = NewDB()
 
 	http.HandleFunc("/", tags)
@@ -278,7 +302,11 @@ func main() {
 		http.StripPrefix("/static/",
 			http.FileServer(http.Dir("static"))))
 
-	log.Print("Launching on http://localhost:" + *port)
-
-	log.Fatal(http.ListenAndServe(":"+*port, nil))
+	if *ssl {
+		log.Print("Launching on https://localhost:" + *port)
+		log.Fatal(http.ListenAndServeTLS(":"+*port, "cert.pem", "key.pem", nil))
+	} else {
+		log.Print("Launching on http://localhost:" + *port)
+		log.Fatal(http.ListenAndServe(":"+*port, nil))
+	}
 }
