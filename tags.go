@@ -163,6 +163,8 @@ func add(w http.ResponseWriter, r *http.Request, uid int32) {
 		return
 	}
 
+	// XXX  remove  html content.
+	// (it should have been removed by js, but...)
 	content := strings.TrimSpace(r.FormValue("content"))
 	typ := getType(content)
 
